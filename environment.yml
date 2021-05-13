@@ -1,0 +1,9 @@
+name: peloton_dashboard
+channels:
+  - defaults
+dependencies:
+  - black=19.10
+  - pandas=1.2.4
+  - pip=21.0.1
+  - python=3.8.8
+  - requests=2.25.1
