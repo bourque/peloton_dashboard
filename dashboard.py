@@ -50,6 +50,18 @@ class Dashboard:
         }
         self.session = requests.Session()
 
+    def _get_url(self, url):
+        """Send a request to the peloton API for the given URL
+
+        Parameters
+        ----------
+        url : str
+            The URL to ping.
+        """
+
+        data = self.session.get(url, timeout=30).json()
+        return data
+
     def _get_user_data(self):
         """Return user data
 
@@ -60,9 +72,7 @@ class Dashboard:
         """
 
         user_url = f'{self.base_url}/api/me'
-        user_data = self.session.get(
-            user_url, timeout=30
-        ).json()
+        user_data = self._get_url(user_url)
 
         return user_data
 
@@ -85,15 +95,12 @@ class Dashboard:
         # Iterate through pages, gather workouts into list
         workouts = []
         page_number = 0
+        full_workout_url = f'{self.base_url}/api/user/{self.user_id}/workouts?sort_by=-created&page={page_number}&limit={page_limit}'
         while page_number < total_pages:
-            workouts.extend(self.session.get(
-                f'{self.base_url}/api/user/{self.user_id}/workouts?sort_by=-created&page={page_number}&limit={page_limit}', timeout=30
-            ).json()['data'])
+            workouts.extend(self._get_url(full_workout_url)['data'])
             page_number += 1
         if remainder != 0:
-            workouts.extend(self.session.get(
-                f'{self.base_url}/api/user/{self.user_id}/workouts?sort_by=-created&page={page_number}&limit={page_limit}', timeout=30
-            ).json()['data'])
+            workouts.extend(self._get_url(full_workout_url)['data'])
 
         return workouts
 
