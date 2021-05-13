@@ -50,14 +50,20 @@ class Dashboard:
         }
         self.session = requests.Session()
 
-    def _get_url(self, url):
+    def _get_url(self, url, verbose=True):
         """Send a request to the peloton API for the given URL
 
         Parameters
         ----------
         url : str
             The URL to ping.
+        verbose : bool
+            If ``True``, print out a message that indicates which URL
+            is being used.
         """
+
+        if verbose:
+            print(f'\tGathering data for {url}')
 
         data = self.session.get(url, timeout=30).json()
         return data
@@ -75,6 +81,31 @@ class Dashboard:
         user_data = self._get_url(user_url)
 
         return user_data
+
+    def get_workout_metadata(self, workouts):
+        """Build a list of workouts with ride and instructor metadata
+        added.
+
+        Parameters
+        ----------
+        workouts : list
+            A list of workouts
+
+        Returns
+        -------
+        workout_metadata_list : list
+            A list of workouts with supplemental metadata
+        """
+
+        workout_metadata_list = []
+        for workout in workouts:
+            workout_id = workout['id']
+            workout_url = f'{self.base_url}/api/workout/{workout_id}?joins=ride,ride.instructor'
+            print(f'\tGathering data for {workout["ride"]["title"]}')
+            data = self._get_url(workout_url, verbose=False)
+            workout_metadata_list.append(data)
+
+        return workout_metadata_list
 
     def get_workouts(self):
         """Return a list of workouts
@@ -95,14 +126,16 @@ class Dashboard:
         # Iterate through pages, gather workouts into list
         workouts = []
         page_number = 0
-        full_workout_url = f'{self.base_url}/api/user/{self.user_id}/workouts?sort_by=-created&page={page_number}&limit={page_limit}'
         while page_number < total_pages:
+            full_workout_url = f'{self.base_url}/api/user/{self.user_id}/workouts?sort_by=-created&page={page_number}&limit={page_limit}&joins=ride'
             workouts.extend(self._get_url(full_workout_url)['data'])
             page_number += 1
         if remainder != 0:
+            full_workout_url = f'{self.base_url}/api/user/{self.user_id}/workouts?sort_by=-created&page={page_number}&limit={page_limit}&joins=ride'
             workouts.extend(self._get_url(full_workout_url)['data'])
 
         return workouts
+
 
     def login(self):
         """Authenticate with the peloton API.
@@ -138,4 +171,5 @@ if __name__ == "__main__":
     dashboard.login()
 
     workouts = dashboard.get_workouts()
+    workout_metadata_list = dashboard.get_workout_metadata(workouts)
 
