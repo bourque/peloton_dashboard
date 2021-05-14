@@ -16,12 +16,19 @@ Authors
 Dependencies
 ------------
 
-
+    - ``pandas``
+    - ``requests``
 """
+
+import datetime
+from functools import reduce
+from pytz import timezone
 
 import json
 import os
 import requests
+
+import pandas as pd
 
 
 class Dashboard:
@@ -49,6 +56,77 @@ class Dashboard:
             "User-Agent": "peloton_dashboard",
         }
         self.session = requests.Session()
+
+    def _clean_data(self, dataframe):
+        """'Clean' the given dataframe.
+
+        By 'clean', I am referring to (1) convert peloton API time
+        from UNIX timestamp to a ``datetime`` object,
+
+        Parameters
+        ----------
+        dataframe : obj
+            A ``pandas`` ``dataframe`` object containing Peloton API
+            data
+
+        Returns
+        -------
+        cleaned_dataframe : obj
+            A 'cleaned' version of the given ``pandas`` ``dataframe``.
+        """
+
+        # Convert times to datetime objects
+        for key in ['start_time', 'end_time', 'created_at', 'created', 'device_time_created_at']:
+            conversion = {}
+            for time in dataframe[key]:
+                time_in_datetime = datetime.datetime.utcfromtimestamp(time)
+                time_in_utc = time_in_datetime.replace(tzinfo=timezone('UTC'))
+                time_in_est = time_in_utc.astimezone(timezone('US/Eastern'))
+                conversion[time] = time_in_est
+            dataframe[key].replace(conversion, inplace=True)
+
+        # Create a dataframe from the ride key
+        ride_data = list(dataframe['ride'])
+        ride_dataframe = self._convert_to_dataframe(ride_data)
+
+        # Create a dataframe from the instructor key
+        instructor_keys = list(ride_dataframe['instructor'][0].keys())
+        instructor_data = list(ride_dataframe['instructor'])
+        instructor_data_cleaned = []
+        for item in instructor_data:
+            if item is None:
+                bogus_data = {}
+                for key in instructor_keys:
+                    bogus_data[key] = None
+                instructor_data_cleaned.append(bogus_data)
+            else:
+                instructor_data_cleaned.append(item)
+        instructor_dataframe = self._convert_to_dataframe(instructor_data_cleaned)
+
+        # Combine the three dataframes into one big one
+        final_dataframe = pd.concat([dataframe, ride_dataframe, instructor_dataframe], axis=1)
+
+        return final_dataframe
+
+    def _convert_to_dataframe(self, data_list):
+        """Convert the given list of ``json`` objects to a ``pandas``
+        dataframe
+
+        Parameters
+        ----------
+        data_list : list
+            A list of ``json`` objects
+
+        Returns
+        -------
+        dataframe : obj
+            A ``pandas`` ``dataframe`` object that corresponds to the
+            given data_list
+        """
+
+        dataframe = pd.DataFrame.from_records(data_list)
+        return dataframe
+
 
     def _get_url(self, url, verbose=True):
         """Send a request to the peloton API for the given URL
@@ -168,8 +246,11 @@ class Dashboard:
 if __name__ == "__main__":
 
     dashboard = Dashboard()
-    dashboard.login()
 
+    dashboard.login()
     workouts = dashboard.get_workouts()
     workout_metadata_list = dashboard.get_workout_metadata(workouts)
+    workout_dataframe = dashboard._convert_to_dataframe(workout_metadata_list)
+    workout_dataframe = dashboard._clean_data(workout_dataframe)
 
+    print(workout_dataframe)
