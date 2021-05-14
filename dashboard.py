@@ -26,13 +26,14 @@ from pytz import timezone
 
 import json
 import os
-import requests
 
 import pandas as pd
+import requests
 
 
-class Dashboard:
-    """The main class of the ``dashboard`` module.
+class APIHandler:
+    """Methods and attributes dealing with gathering, combining, and
+    cleaning data from the Peloton API.
 
     Attributes
     ----------
@@ -40,10 +41,24 @@ class Dashboard:
         The base URL for the peloton API
     headers : dict
         Header content for API requests
+    session : obj
+        A session to be used to conenct to the Peloton API
 
     Methods
     -------
-    _login()
+    _clean_data
+        "Clean" a given ``pandas`` dataframe
+    _convert_to_dataframe
+        Converts a list of ``json`` objects to a ``pandas`` dataframe
+    _get_url
+        Sends a request to the Peloton API for a given url
+    _get_user_data
+        Retrieves the user data from the Peloton API
+    get_workout_metadata
+        Retrieves workout metadata from the Peloton API
+    get_workouts
+        Retrieves a list of workouts for a user from the Peloton API
+    login()
         Authenticate with the peloton API
     """
 
@@ -61,7 +76,7 @@ class Dashboard:
         """'Clean' the given dataframe.
 
         By 'clean', I am referring to (1) convert peloton API time
-        from UNIX timestamp to a ``datetime`` object,
+        from UNIX timestamp to a ``datetime`` object, (2) create
 
         Parameters
         ----------
@@ -144,6 +159,7 @@ class Dashboard:
             print(f'\tGathering data for {url}')
 
         data = self.session.get(url, timeout=30).json()
+
         return data
 
     def _get_user_data(self):
@@ -245,12 +261,12 @@ class Dashboard:
 
 if __name__ == "__main__":
 
-    dashboard = Dashboard()
+    api_handler = APIHandler()
 
-    dashboard.login()
-    workouts = dashboard.get_workouts()
-    workout_metadata_list = dashboard.get_workout_metadata(workouts)
-    workout_dataframe = dashboard._convert_to_dataframe(workout_metadata_list)
-    workout_dataframe = dashboard._clean_data(workout_dataframe)
+    api_handler.login()
+    workouts = api_handler.get_workouts()
+    workout_metadata_list = api_handler.get_workout_metadata(workouts)
+    workout_dataframe = api_handler._convert_to_dataframe(workout_metadata_list)
+    workout_dataframe = api_handler._clean_data(workout_dataframe)
 
     print(workout_dataframe)
