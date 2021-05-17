@@ -3,6 +3,7 @@ channels:
   - defaults
 dependencies:
   - black=19.10
+  - holoviews=1.14.3
   - pandas=1.2.4
   - pip=21.0.1
   - python=3.8.8
