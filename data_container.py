@@ -48,10 +48,13 @@ class DataContainer():
         Converts a list of ``json`` objects to a ``pandas`` dataframe
     _get_url
         Sends a request to the Peloton API for a given url
+    get_combined_dataframe
+        Retrieves a dataframe of workout and coresponding metadata from
+        the peloton API
+    get_workouts_dataframe
+        Retrieves a dataframe of workouts for a user from the Peloton API
     get_workout_metadata_dataframe
         Retrieves workout metadata from the Peloton API
-    get_workouts_dataframe
-        Retrieves a list of workouts for a user from the Peloton API
     get_user_dataframe
         Retrieves the user data from the Peloton API
     login()
@@ -128,31 +131,27 @@ class DataContainer():
         """
 
         # Get the individual workout (meta)data dataframes
-        workouts_dataframe = data_container.get_workouts_dataframe()
-        rides_dataframe = data_container.get_rides_dataframe()
-        workout_metadata_dataframe = data_container.get_workout_metadata_dataframe()
+        workouts_dataframe = self.get_workouts_dataframe()
+        workout_metadata_dataframe = self.get_workout_metadata_dataframe()
+
+        # The dataframes has some redundant columns
+        redundant_columns = [
+            'created_at', 'device_type', 'end_time', 'fitbit_id', 'fitness_discipline', 'has_pedaling_metrics',
+            'has_leaderboard_metrics', 'id', 'is_total_work_personal_record', 'metrics_type', 'name', 'peloton_id',
+            'platform', 'start_time', 'strava_id', 'status', 'timezone', 'title', 'total_work', 'user_id',
+            'workout_type', 'total_video_watch_time_seconds', 'total_video_buffering_seconds',
+            'v2_total_video_watch_time_seconds', 'v2_total_video_buffering_seconds', 'total_music_audio_play_seconds',
+            'total_music_audio_buffer_seconds', 'created', 'device_time_created_at', 'effort_zones']
+        for column in redundant_columns:
+            del workout_metadata_dataframe[column]
 
         # Combine the three dataframes into one big one
-        combined_dataframe = pd.concat([workouts_dataframe, rides_dataframe, workout_metadata_dataframe], axis=1)
+        combined_dataframe = pd.concat([workouts_dataframe, workout_metadata_dataframe], axis=1)
 
         # Order the dataframe in increasing time
         combined_dataframe = combined_dataframe.sort_index(ascending=False).reset_index()
 
         return combined_dataframe
-
-    def get_rides_dataframe(self):
-        """Return workout data from the ``ride`` API URL
-
-        Returns
-        -------
-        user_dataframe : ``pandas.core.frame.DataFrame``
-            A dataframe of the user data
-        """
-
-        workouts_dataframe = self.get_workouts_dataframe()
-        workout_ids = workouts_dataframe['id'].values
-        for workout_id in workout_ids[0:20]:
-            ride_url = f'{self.base_url}/api/workout/{workout_id}?joins=ride,ride.instructor'
 
     def get_workouts_dataframe(self):
         """Return workout data from the ``workouts`` API URL
@@ -175,11 +174,11 @@ class DataContainer():
         page_number = 0
         while page_number < total_pages:
             full_workout_url = f'{self.base_url}/api/user/{self.user_id}/workouts?sort_by=-created&page={page_number}&limit={page_limit}'
-            workouts.extend(self._get_url(full_workout_url)['data'])
+            workouts.extend(self._get_url(full_workout_url, verbose=False)['data'])
             page_number += 1
         if remainder != 0:
             full_workout_url = f'{self.base_url}/api/user/{self.user_id}/workouts?sort_by=-created&page={page_number}&limit={page_limit}'
-            workouts.extend(self._get_url(full_workout_url)['data'])
+            workouts.extend(self._get_url(full_workout_url, verbose=False)['data'])
 
         workouts_dataframe = self._convert_to_dataframe(workouts)
 
@@ -198,18 +197,16 @@ class DataContainer():
         workout_metadata_list = []
         workouts_dataframe = self.get_workouts_dataframe()
         workout_ids = workouts_dataframe['id'].values
-        for workout_id in workout_ids:
+        for i, workout_id in enumerate(workout_ids):
             workout_url = f'{self.base_url}/api/workout/{workout_id}?joins=ride,ride.instructor'
             workout_url_performance = f'{self.base_url}/api/workout/{workout_id}/performance_graph?every_n=10000'
-            print(f'\tGathering data for workout {workout_id}')
+            print(f'\tGathering data for workout {i} of {len(workout_ids)}', end='\r')
             workout_data = self._get_url(workout_url, verbose=False)
             performance_data = self._get_url(workout_url_performance, verbose=False)
             data = {**workout_data, **performance_data}
             workout_metadata_list.append(data)
 
         workout_metadata_dataframe = self._convert_to_dataframe(workout_metadata_list)
-        for col in workout_metadata_dataframe.columns:
-            print(col)
 
         return workout_metadata_dataframe
 
@@ -260,18 +257,37 @@ class DataContainer():
         except KeyError:
             print("Login failed")
 
-def get_peloton_data():
+
+def get_workout_data(discipline='all'):
     """A wrapper around methods of the ``data_container`` class to
-    retrieve a complete ``pandas`` ``dataframe`` of data
+    retrieve a complete ``pandas`` ``dataframe`` of workout data.
+
+    Parameters
+    ----------
+    discipline : str
+        The workout discipline of interest.  If ``all``, then all
+        workout data will be returned.  If a specific discipline
+        (e.g. ``cycling``) is specified, then only that discipline's
+        data will be returned.  Supported disciplines include ``all``,
+        ``cycling``, ``stretching``, ``meditation``, ``strength``,
+        ``yoga``, ``running``, ``walking``, ``cardio``, and
+        ``bike_bootcamp``
 
     Returns
     -------
     data : ``pandas.core.frame.DataFrame``
-        A ``pandas`` ``dataframe`` object containing Peloton metadata
+        A ``pandas`` ``dataframe`` object containing workout data
     """
+
+    supported_disciplines = ['all', 'bike_bootcamp', 'cardio', 'cycling', 'meditation',
+                             'running', 'strength', 'stretching', 'walking', 'yoga']
+    assert discipline in supported_disciplines, f'{discipline} is not supported.  Supported disciplines include {supported_disciplines}'
 
     data_container = DataContainer()
     data_container.login()
     data = data_container.get_combined_dataframe()
+
+    if discipline != 'all':
+        data = data[data['fitness_discipline'] == discipline]
 
     return data
